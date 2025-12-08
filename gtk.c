@@ -179,6 +179,12 @@ struct frontend {
     GtkWidget *area;
     GtkWidget *statusbar;
     GtkWidget *menubar;
+#if GTK_CHECK_VERSION(3,14,0)
+    GtkGesture *long_press;
+    GdkEventSequence *touch_sequence;
+    int touch_button;
+    int touch_ox, touch_oy;
+#endif
 #if GTK_CHECK_VERSION(3,20,0)
     GtkCssProvider *css_provider;
 #endif
@@ -1610,6 +1616,86 @@ static gint motion_event(GtkWidget *widget, GdkEventMotion *event,
 
     return true;
 }
+
+#if GTK_CHECK_VERSION(3,14,0)
+static gint touch_event(GtkWidget *widget, GdkEventTouch *event,
+                         gpointer data)
+{
+    frontend *fe = (frontend *)data;
+    int button;
+
+    if (!backing_store_ok(fe))
+        return true;
+
+    if (event->type == GDK_TOUCH_BEGIN) {
+        if (fe->touch_sequence)
+            return true;
+        fe->touch_sequence = event->sequence;
+        fe->touch_ox = event->x;
+        fe->touch_oy = event->y;
+        fe->touch_button = 0;
+        return true;
+    }
+
+    if (event->sequence != fe->touch_sequence)
+        return true;
+
+    if (event->type == GDK_TOUCH_UPDATE) {
+        if (!fe->touch_button)
+            return true;
+
+        if (midend_process_key(fe->me, event->x - fe->ox, event->y - fe->oy,
+                               fe->touch_button + (LEFT_DRAG - LEFT_BUTTON))
+            == PKR_QUIT)
+            gtk_widget_destroy(fe->window);
+        return true;
+    }
+
+    if (event->type == GDK_TOUCH_END && !fe->touch_button) {
+        fe->touch_button = LEFT_BUTTON | MOD_STYLUS;
+        if (midend_process_key(fe->me, event->x - fe->ox, event->y - fe->oy,
+                               fe->touch_button) == PKR_QUIT) {
+            gtk_widget_destroy(fe->window);
+            return true;
+        }
+    }
+
+    if (fe->touch_button) {
+        if (midend_process_key(fe->me, event->x - fe->ox, event->y - fe->oy,
+                               fe->touch_button + (LEFT_RELEASE - LEFT_BUTTON))
+            == PKR_QUIT)
+            gtk_widget_destroy(fe->window);
+        fe->touch_sequence = NULL;
+        fe->touch_button = 0;
+    }
+
+    return true;
+}
+
+static void long_press_pressed(GtkGestureLongPress *gesture, double x, double y,
+                               gpointer data)
+{
+    frontend *fe = (frontend *)data;
+    if (!fe->touch_sequence)
+        return;
+
+    fe->touch_button = RIGHT_BUTTON | MOD_STYLUS;
+    if (midend_process_key(fe->me, fe->touch_ox - fe->ox, fe->touch_oy - fe->oy,
+                           fe->touch_button) == PKR_QUIT)
+        gtk_widget_destroy(fe->window);
+}
+
+static void long_press_cancelled(GtkGestureLongPress *gesture, gpointer data) {
+    frontend *fe = (frontend *)data;
+    if (!fe->touch_sequence)
+        return;
+
+    fe->touch_button = LEFT_BUTTON | MOD_STYLUS;
+    if (midend_process_key(fe->me, fe->touch_ox - fe->ox, fe->touch_oy - fe->oy,
+                           fe->touch_button) == PKR_QUIT)
+        gtk_widget_destroy(fe->window);
+}
+#endif
 
 #if GTK_CHECK_VERSION(3,0,0)
 static gint draw_area(GtkWidget *widget, cairo_t *cr, gpointer data)
@@ -3850,6 +3936,20 @@ static frontend *new_window(
     fe->paste_data = NULL;
     fe->paste_data_len = 0;
 
+#if GTK_CHECK_VERSION(3,14,0)
+    fe->long_press = gtk_gesture_long_press_new(fe->area);
+    gtk_gesture_single_set_touch_only(GTK_GESTURE_SINGLE(fe->long_press), true);
+    gtk_event_controller_set_propagation_phase(GTK_EVENT_CONTROLLER(fe->long_press), GTK_PHASE_CAPTURE);
+    fe->touch_sequence = NULL;
+    fe->touch_button = 0;
+    g_signal_connect(G_OBJECT(fe->area), "touch_event",
+                     G_CALLBACK(touch_event), fe);
+    g_signal_connect(G_OBJECT(fe->long_press), "pressed",
+                     G_CALLBACK(long_press_pressed), fe);
+    g_signal_connect(G_OBJECT(fe->long_press), "cancelled",
+                     G_CALLBACK(long_press_cancelled), fe);
+#endif
+
     g_signal_connect(G_OBJECT(fe->window), "destroy",
                      G_CALLBACK(destroy), fe);
     g_signal_connect(G_OBJECT(fe->window), "key_press_event",
@@ -3883,6 +3983,9 @@ static frontend *new_window(
 #endif
 
     gtk_widget_add_events(GTK_WIDGET(fe->area),
+#if GTK_CHECK_VERSION(3,14,0)
+                          GDK_TOUCH_MASK |
+#endif
                           GDK_BUTTON_PRESS_MASK |
                           GDK_BUTTON_RELEASE_MASK |
 			  GDK_BUTTON_MOTION_MASK |
