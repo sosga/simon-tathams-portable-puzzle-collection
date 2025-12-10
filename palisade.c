@@ -1577,5 +1577,5 @@ const struct game thegame = {
     true, false, game_print_size, game_print,
     true,                                     /* wants_statusbar */
     false, NULL,                       /* timing_state */
-    0,                                         /* flags */
+    REQUIRE_RBUTTON,                           /* flags */
 };
