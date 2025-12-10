@@ -147,7 +147,7 @@ struct _WrapBoxClass {
     GtkContainerClass parent_class;
 };
 
-G_DECLARE_FINAL_TYPE(WrapBox, wrap_box, PUZZLES, WRAP_BOX, GtkContainer);
+G_DECLARE_FINAL_TYPE(WrapBox, wrap_box, PUZZLES, WRAP_BOX, GtkContainer)
 
 static GtkWidget* wrap_box_new(void)
 {
@@ -161,7 +161,7 @@ static void wrap_box_init(WrapBox *box)
     box->children = NULL;
 }
 
-G_DEFINE_TYPE(WrapBox, wrap_box, GTK_TYPE_CONTAINER);
+G_DEFINE_TYPE(WrapBox, wrap_box, GTK_TYPE_CONTAINER)
 
 static void wrap_box_add(GtkContainer* container, GtkWidget *widget)
 {
@@ -1812,7 +1812,6 @@ static gint touch_event(GtkWidget *widget, GdkEventTouch *event,
                          gpointer data)
 {
     frontend *fe = (frontend *)data;
-    int button;
 
     if (!backing_store_ok(fe))
         return true;
