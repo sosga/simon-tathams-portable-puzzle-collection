@@ -825,6 +825,9 @@ static char *new_game_desc(const game_params *params, random_state *rs,
 #ifdef DEBUG_PRINTS
     printf("compressed_desc: %s\n", compressed_desc);
 #endif
+    sfree(image);
+    sfree(desc_string);
+    sfree(desc);
     return compressed_desc;
 }
 
